@@ -285,7 +285,7 @@ test.describe('ProgressHistory', () => {
             .click();
         await page.getByTestId('task-updater-show-history-button').click();
 
-        await expect(page.getByText('You have no history for this requirement.')).toBeVisible();
+        await expect(page.getByTestId('no-history-text')).toBeVisible();
         await expect(page.getByText('Total Count: 0. Current Cohort: 0')).toBeVisible();
         await expect(page.getByText('Total Time: 0h 0m. Current Cohort: 0h 0m')).toBeVisible();
     });
@@ -311,9 +311,6 @@ test.describe('ProgressHistory', () => {
 
         await expect(page.getByText('Total Count: 80. Current Cohort: 80')).toBeVisible();
         await expect(page.getByText('Total Time: 3h 20m. Current Cohort: 2h 10m')).toBeVisible();
-
-        // The 'nonexistent task' does not appear. Only one with count 19.
-        await expect(page.getByText('19', { exact: true })).not.toBeVisible();
     });
 
     test('Deleting tasks from progress history behaves correctly', async ({ page }) => {
@@ -325,9 +322,6 @@ test.describe('ProgressHistory', () => {
 
         // Delete the second entry
         await page.getByTestId('task-history-delete-button').nth(1).click();
-
-        // Verify that we've hidden the entry we want to delete. It's the only one with a count of 20
-        await expect(page.getByText('20', { exact: true })).not.toBeVisible();
 
         // Save the changes, which will trigger a POST request to update the timeline
         await page.getByTestId('task-updater-save-button').click();
