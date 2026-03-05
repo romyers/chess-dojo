@@ -434,12 +434,15 @@ export function useProgressHistoryEditor({
         requirement?.scoreboardDisplay === ScoreboardDisplay.Minutes;
 
     const initialItems: HistoryItem[] = useMemo(() => {
+        // Older timeline entries in the database may have previousCount < startCount.
+        // It's important to make sure that count will be newCount - startCount
+        // in these cases, so we take Math.max(previousCount, startCount || 0).
         return entries
             .filter((t) => t.requirementId === requirement?.id)
             .sort((a, b) => (a.date || a.createdAt).localeCompare(b.date || b.createdAt))
             .map((t, idx) => ({
                 date: DateTime.fromISO(t.date || t.createdAt),
-                count: `${t.newCount - t.previousCount}`,
+                count: `${t.newCount - Math.max(t.previousCount, requirement?.startCount || 0)}`,
                 hours: `${Math.floor(t.minutesSpent / 60)}`,
                 minutes: `${t.minutesSpent % 60}`,
                 notes: t.notes,
