@@ -121,8 +121,6 @@ const mockUser = {
 };
 
 test.describe('InputSlider', () => {
-    // TODO: /public/user route (for useTimelineContext)
-    // TODO: Mock put requests to check update functionality
     test.beforeEach(async ({ page }) => {
         // Mock user get route, and abort other user requests
         await page.route(`${getEnv('apiBaseUrl')}/user`, async (route) => {
