@@ -21,6 +21,7 @@ services:
       NotificationEventQueueArn: ${notificationService.NotificationEventQueueArn}
       NotificationEventQueueUrl: ${notificationService.NotificationEventQueueUrl}
       DirectoriesTableArn: ${directoryService.DirectoriesTableArn}
+      GamesTableArn: ${chess-dojo-scheduler.GamesTableArn}
 
   discordAuthService:
     path: discordAuthService
