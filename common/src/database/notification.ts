@@ -27,6 +27,8 @@ const NotificationEventTypeSchema = z.enum([
     'ROUND_ROBIN_START',
     /** A user has created their subscription */
     'SUBSCRIPTION_CREATED',
+    /** A blog post has been published */
+    'BLOG_PUBLISHED',
 ]);
 
 /** The types of a notification event. */
@@ -213,6 +215,25 @@ const SubscriptionCreatedEventSchema = z.object({
 /** The type of a notification event when a user has created their subscription. */
 export type SubscriptionCreatedEvent = z.infer<typeof SubscriptionCreatedEventSchema>;
 
+/** The type of a notification event when a blog post is published. */
+const BlogPublishedEventSchema = z.object({
+    /** The type of the event. */
+    type: z.literal(NotificationEventTypes.BLOG_PUBLISHED),
+    /** The id of the blog post that was published. */
+    blogId: z.string(),
+    /** The title of the blog post. */
+    title: z.string(),
+    /** The subtitle of the blog post. */
+    subtitle: z.string(),
+    /** The description of the blog post. */
+    description: z.string(),
+    /** The cover image of the blog post. */
+    coverImage: z.string().optional(),
+});
+
+/** The type of a notification event when a blog post is published. */
+export type BlogPublishedEvent = z.infer<typeof BlogPublishedEventSchema>;
+
 /** The schema of an event that generates notifications. */
 export const NotificationEventSchema = z.discriminatedUnion('type', [
     NewFollowerEventSchema,
@@ -227,6 +248,7 @@ export const NotificationEventSchema = z.discriminatedUnion('type', [
     CalendarInviteEventSchema,
     RoundRobinStartEventSchema,
     SubscriptionCreatedEventSchema,
+    BlogPublishedEventSchema,
 ]);
 
 /** An event that generates notifications. */
