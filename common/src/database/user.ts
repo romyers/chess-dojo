@@ -100,6 +100,9 @@ export interface User {
     /** The IDs of the user's pinned tasks. */
     pinnedTasks?: string[];
 
+    /** The IDs of the user's archived tasks. */
+    archivedTasks?: string[];
+
     /** The day the user's week starts on. Sunday is 0; Saturday is 6. */
     weekStart: 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -195,6 +198,8 @@ export interface WeeklyPlan {
     progressUpdatedAt: string;
     /** The ids of the user's pinned tasks (in order) when the weekly plan was last generated. */
     pinnedTasks?: string[];
+    /** The ids of the user's archived tasks when the weekly plan was last generated. */
+    archivedTasks?: string[];
     /** The date (in ISO 8601) of the user's next scheduled game when the weekly plan was last generated. */
     nextGame: string;
     /** The ids of the user's skipped tasks (in order) when the weekly plan was last generated. */

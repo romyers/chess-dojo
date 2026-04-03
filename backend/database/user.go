@@ -330,6 +330,9 @@ type User struct {
 	// The IDs of the user's pinned tasks.
 	PinnedTasks []string `dynamodbav:"pinnedTasks,omitempty" json:"pinnedTasks"`
 
+	// The IDs of the user's archived tasks
+	ArchivedTasks []string `dynamodbav:"archivedTasks,omitempty" json:"archivedTasks"`
+
 	// The day the user's week starts on. Sunday is 0; Saturday is 6.
 	WeekStart int `dynamodbav:"weekStart,omitempty" json:"weekStart"`
 
@@ -439,6 +442,9 @@ type WeeklyPlan struct {
 
 	// The ids of the user's pinned tasks (in order) when the weekly plan was last generated.
 	PinnedTasks []string `dynamodbav:"pinnedTasks,omitempty" json:"pinnedTasks,omitempty"`
+
+	// The IDs of the user's archived tasks when the weekly plan was last generated.
+	ArchivedTasks []string `dynamodbav:"archivedTasks,omitempty" json:"archivedTasks,omitempty"`
 
 	// The date (in ISO 8601) of the user's next scheduled game when the weekly plan was last generated.
 	NextGame string `dynamodbav:"nextGame,omitempty" json:"nextGame"`
@@ -803,6 +809,9 @@ type UserUpdate struct {
 
 	// The IDs of the user's pinned tasks.
 	PinnedTasks *[]string `dynamodbav:"pinnedTasks,omitempty" json:"pinnedTasks,omitempty"`
+
+	// The IDs of the user's archived tasks
+	ArchivedTasks *[]string `dynamodbav:"archivedTasks,omitempty" json:"archivedTasks,omitempty"`
 
 	// The day the user's week starts on. Sunday is 0; Saturday is 6.
 	WeekStart *int `dynamodbav:"weekStart,omitempty" json:"weekStart,omitempty"`

@@ -48,6 +48,7 @@ test.describe('Custom Task Editor', () => {
                             referralSource: 'Reddit',
                             totalDojoScore: 2,
                             pinnedTasks: [],
+                            archivedTasks: [],
                             weekStart: 0,
                         }),
                     });

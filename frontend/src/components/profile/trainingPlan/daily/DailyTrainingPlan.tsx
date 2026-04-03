@@ -246,12 +246,22 @@ function DailyTrainingPlanItem({
                     <CardContent sx={{ height: 1 }}>
                         <Stack sx={{ height: 1 }}>
                             <Stack spacing={1} alignItems='start'>
-                                <Chip
-                                    variant='outlined'
-                                    label={displayRequirementCategory(task.category)}
-                                    color={themeRequirementCategory(task.category)}
-                                    size='small'
-                                />
+                                <Stack direction='row' spacing={1} alignItems='start'>
+                                    <Chip
+                                        variant='outlined'
+                                        label={displayRequirementCategory(task.category)}
+                                        color={themeRequirementCategory(task.category)}
+                                        size='small'
+                                    />
+                                    {user.archivedTasks?.includes(task.id) && (
+                                        <Chip
+                                            variant='outlined'
+                                            label='Archived'
+                                            color='default'
+                                            size='small'
+                                        />
+                                    )}
+                                </Stack>
 
                                 <Typography variant='h6' fontWeight='bold'>
                                     {taskTitle({ task, cohort: user.dojoCohort, goalMinutes })}

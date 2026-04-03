@@ -41,6 +41,8 @@ export interface Section {
     uncompletedTasks: (Requirement | CustomTask)[];
     /** The completed tasks in the section. */
     completedTasks: (Requirement | CustomTask)[];
+    /** The IDs of the user's archived tasks in the section. */
+    archivedTaskIds: Set<string>;
     /** The color of the icon in the section header and the progress bar. */
     color?: string;
     /** The value of the progress bar for the section. */
@@ -68,6 +70,8 @@ interface TrainingPlanSectionProps {
     showCompleted: boolean;
     /** Callback to set whether to show completed tasks. */
     setShowCompleted: (v: boolean) => void;
+    /** Whether to show archived tasks */
+    showArchived: boolean;
 }
 
 export function FullTrainingPlanSection({
@@ -81,6 +85,7 @@ export function FullTrainingPlanSection({
     pinnedTasks,
     showCompleted,
     setShowCompleted,
+    showArchived,
 }: TrainingPlanSectionProps) {
     const isFreeTier = useFreeTier();
     const [showCustomTaskEditor, setShowCustomTaskEditor] = useState(false);
@@ -166,6 +171,8 @@ export function FullTrainingPlanSection({
                     isCurrentUser={isCurrentUser}
                     togglePin={togglePin}
                     pinnedTasks={pinnedTasks}
+                    archivedTaskIds={section.archivedTaskIds}
+                    showArchived={showArchived}
                 />
 
                 {section.completedTasks.length > 0 &&
@@ -192,6 +199,8 @@ export function FullTrainingPlanSection({
                                 isCurrentUser={isCurrentUser}
                                 togglePin={togglePin}
                                 pinnedTasks={pinnedTasks}
+                                archivedTaskIds={section.archivedTaskIds}
+                                showArchived={showArchived}
                             />
                         </>
                     ) : (
@@ -246,6 +255,8 @@ function TaskList({
     isCurrentUser,
     togglePin,
     pinnedTasks,
+    showArchived,
+    archivedTaskIds,
 }: {
     tasks: (Requirement | CustomTask)[];
     isFreeTier: boolean;
@@ -256,10 +267,26 @@ function TaskList({
     togglePin: (req: Requirement | CustomTask) => void;
     /** The set of pinned tasks. */
     pinnedTasks: (Requirement | CustomTask)[];
+    showArchived: boolean;
+    archivedTaskIds: Set<string>;
 }) {
+    // Partition tasks into an array of archived tasks and an array of unarchived tasks
+    const [unarchivedTasks, archivedTasks] = tasks.reduce<
+        [(Requirement | CustomTask)[], (Requirement | CustomTask)[]]
+    >(
+        ([unarchived, archived], task) => {
+            (archivedTaskIds.has(task.id) ? archived : unarchived).push(task);
+            return [unarchived, archived];
+        },
+        [[], []],
+    );
+
+    // Reconstitute the list of tasks with archived tasks at the end if they should be shown, and removed otherwise
+    const displayedTasks = showArchived ? [...unarchivedTasks, ...archivedTasks] : unarchivedTasks;
+
     return (
         <>
-            {tasks.map((r) => {
+            {displayedTasks.map((r) => {
                 if (r.id === SCHEDULE_CLASSICAL_GAME_TASK_ID) {
                     return <ScheduleClassicalGame key={r.id} hideChip />;
                 }
@@ -287,6 +314,7 @@ function TaskList({
                         user={user}
                         togglePin={togglePin}
                         isPinned={pinnedTasks.some((t) => t.id === r.id)}
+                        isArchived={archivedTaskIds.has(r.id)}
                     />
                 );
             })}

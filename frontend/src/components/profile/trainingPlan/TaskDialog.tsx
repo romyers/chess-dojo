@@ -19,7 +19,17 @@ import {
     ScoreboardDisplay,
 } from '@/database/requirement';
 import { ALL_COHORTS, compareCohorts, dojoCohorts } from '@/database/user';
-import { AccessAlarm, Check, Lock, Loop, Pause, PlayArrow, Scoreboard } from '@mui/icons-material';
+import {
+    AccessAlarm,
+    Archive,
+    Check,
+    Lock,
+    Loop,
+    Pause,
+    PlayArrow,
+    Scoreboard,
+    Unarchive,
+} from '@mui/icons-material';
 import {
     Box,
     Button,
@@ -36,6 +46,7 @@ import {
 import { use, useMemo, useState } from 'react';
 import CustomTaskEditor from './CustomTaskEditor';
 import { TaskDescription } from './TaskDescription';
+import { TrainingPlanContext } from './TrainingPlanTab';
 
 export enum TaskDialogView {
     Details = 'DETAILS',
@@ -130,7 +141,21 @@ type DetailsDialogProps = Pick<TaskDialogProps, 'task' | 'onClose' | 'cohort'> &
 };
 
 function DetailsDialog({ task, onClose, cohort, setView }: DetailsDialogProps) {
-    const { user } = useAuth();
+    const auth = useAuth();
+    const trainingPlan = use(TrainingPlanContext);
+
+    // If the training plan exists, use that. Otherwise fall back to hardcoded values.
+    // NOTE: The fallback case represents cases where archival functionality shouldn't be
+    //       displayed at all, so we can leave toggleArchived and isArchivableTaskId undefined
+    const { user, isCurrentUser, toggleArchived, isArchivableTaskId } = trainingPlan
+        ? trainingPlan
+        : {
+              user: auth.user,
+              isCurrentUser: false,
+              toggleArchived: undefined,
+              isArchivableTaskId: undefined,
+          };
+
     const { entries: timeline } = useTimelineContext();
     const [showEditor, setShowEditor] = useState(false);
     const [showDeleter, setShowDeleter] = useState(false);
@@ -202,6 +227,7 @@ function DetailsDialog({ task, onClose, cohort, setView }: DetailsDialogProps) {
     const totalCount = task.counts[selectedCohort] || task.counts[ALL_COHORTS];
     const currentCount = progress?.counts?.[selectedCohort] || progress?.counts?.[ALL_COHORTS] || 0;
     const isCompleted = currentCount >= totalCount;
+    const isArchived = user?.archivedTasks?.includes(task.id) ?? false;
 
     let requirementName = task.name.replaceAll('{{count}}', `${totalCount}`);
     if (task.scoreboardDisplay === ScoreboardDisplay.Checkbox && totalCount > 1) {
@@ -307,28 +333,49 @@ function DetailsDialog({ task, onClose, cohort, setView }: DetailsDialogProps) {
                 </Stack>
             </DialogContent>
             <DialogActions sx={{ flexWrap: 'wrap' }}>
-                <Box sx={{ flexGrow: 1 }}>
-                    {timerRunning ? (
-                        <Button
-                            color='warning'
-                            startIcon={<Pause />}
-                            onClick={() => {
-                                onPauseTimer();
-                                setView(TaskDialogView.Progress);
-                            }}
+                {isCurrentUser && (
+                    <Box sx={{ flexGrow: 1 }}>
+                        {timerRunning ? (
+                            <Button
+                                color='warning'
+                                startIcon={<Pause />}
+                                onClick={() => {
+                                    onPauseTimer();
+                                    setView(TaskDialogView.Progress);
+                                }}
+                            >
+                                Pause Timer ({formatTime(timerSeconds)})
+                            </Button>
+                        ) : (
+                            <Button
+                                color={timerIsOtherTask ? 'error' : 'warning'}
+                                startIcon={<PlayArrow />}
+                                onClick={() => onStartTimer(task.id)}
+                            >
+                                {getTimerLabel(task.id)}
+                            </Button>
+                        )}
+                        <Tooltip
+                            title={
+                                isArchivableTaskId?.(task.id)
+                                    ? isArchived
+                                        ? `Unarchive and restore to your active training plan`
+                                        : `Archive and remove from your active training plan`
+                                    : 'This task cannot be archived.'
+                            }
                         >
-                            Pause Timer ({formatTime(timerSeconds)})
-                        </Button>
-                    ) : (
-                        <Button
-                            color={timerIsOtherTask ? 'error' : 'warning'}
-                            startIcon={<PlayArrow />}
-                            onClick={() => onStartTimer(task.id)}
-                        >
-                            {getTimerLabel(task.id)}
-                        </Button>
-                    )}
-                </Box>
+                            <span>
+                                <Button
+                                    onClick={() => toggleArchived?.(task)}
+                                    startIcon={isArchived ? <Unarchive /> : <Archive />}
+                                    disabled={!isArchivableTaskId?.(task.id)}
+                                >
+                                    {isArchived ? `Unarchive Task` : `Archive Task`}
+                                </Button>
+                            </span>
+                        </Tooltip>
+                    </Box>
+                )}
 
                 <Button onClick={onClose}>Cancel</Button>
                 <Button onClick={() => setView(TaskDialogView.Progress)}>Update Progress</Button>

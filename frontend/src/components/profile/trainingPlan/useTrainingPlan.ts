@@ -7,7 +7,8 @@ import { TimelineEntry } from '@/database/timeline';
 import { ALL_COHORTS, User, WeeklyPlan, WorkGoalSettings } from '@/database/user';
 import { useEffect, useMemo } from 'react';
 import { useTimelineContext } from '../activity/useTimeline';
-import { SuggestedTask, TaskSuggestionAlgorithm } from './suggestedTasks';
+import { GRADUATION_TASK_ID } from './full/FullTrainingPlanSection';
+import { CLASSICAL_GAMES_TASK_ID, SuggestedTask, TaskSuggestionAlgorithm } from './suggestedTasks';
 
 export interface UseTrainingPlanResponse {
     /** The request for fetching requirements. */
@@ -20,14 +21,20 @@ export interface UseTrainingPlanResponse {
     pinnedTasks: (Requirement | CustomTask)[];
     /** A callback function to toggle whether a task is pinned. */
     togglePin: (task: Requirement | CustomTask) => void;
+    /** A callback function to toggle whether a task is archived */
+    toggleArchived: (task: Requirement | CustomTask) => void;
     /** The user passed as a parameter, unchanged. */
     user: User;
     /** Whether the provided user is the current logged in user. */
     isCurrentUser: boolean;
+    /** The ids of tasks the user has archived. */
+    archivedTaskIds: string[];
     /** The ids of tasks the user has skipped for the current week. */
     skippedTaskIds?: string[];
     /** A callback function to toggle whether a task is skipped. */
     toggleSkip: (...ids: string[]) => void;
+    /** A function to determine if a task can be archived based on its ID. */
+    isArchivableTaskId: (taskId: string) => boolean;
 }
 
 /**
@@ -51,6 +58,9 @@ export function useTrainingPlan(user: User, cohort?: string): UseTrainingPlanRes
                 .filter((t) => !!t) ?? []
         );
     }, [user, allRequirements]);
+    const archivedTaskIds = useMemo(() => {
+        return user.archivedTasks ?? [];
+    }, [user]);
 
     const togglePin = (task: Requirement | CustomTask) => {
         const isPinned = pinnedTasks.some((t) => t.id === task.id);
@@ -61,6 +71,32 @@ export function useTrainingPlan(user: User, cohort?: string): UseTrainingPlanRes
 
         updateUser({ pinnedTasks: newIds });
         void api.updateUser({ pinnedTasks: newIds });
+    };
+
+    // Determines if a task can be archived based on its ID.
+    const isArchivableTaskId = (taskId: string) => {
+        if (taskId === CLASSICAL_GAMES_TASK_ID) {
+            return false;
+        }
+
+        if (taskId === GRADUATION_TASK_ID) {
+            return false;
+        }
+
+        return true;
+    };
+
+    const toggleArchived = (task: Requirement | CustomTask) => {
+        if (!isArchivableTaskId(task.id)) {
+            return;
+        }
+        const isArchived = archivedTaskIds.some((id) => id === task.id);
+        const newArchivedTasks = isArchived
+            ? archivedTaskIds.filter((id) => id !== task.id)
+            : [...archivedTaskIds, task.id];
+
+        updateUser({ archivedTasks: newArchivedTasks });
+        void api.updateUser({ archivedTasks: newArchivedTasks });
     };
 
     const toggleSkip = (...ids: string[]) => {
@@ -80,9 +116,12 @@ export function useTrainingPlan(user: User, cohort?: string): UseTrainingPlanRes
         allRequirements,
         pinnedTasks,
         togglePin,
+        archivedTaskIds,
+        toggleArchived,
         isCurrentUser: currentUser?.username === user.username,
         skippedTaskIds: user.weeklyPlan?.skippedTasks,
         toggleSkip,
+        isArchivableTaskId,
     };
 }
 
@@ -104,7 +143,8 @@ export interface UseWeeklyTrainingPlanResponse extends UseTrainingPlanResponse {
 export function useWeeklyTrainingPlan(user: User): UseWeeklyTrainingPlanResponse {
     const api = useApi();
     const trainingPlan = useTrainingPlan(user);
-    const { pinnedTasks, requirements, allRequirements, isCurrentUser } = trainingPlan;
+    const { pinnedTasks, archivedTaskIds, requirements, allRequirements, isCurrentUser } =
+        trainingPlan;
     const { entries: timeline } = useTimelineContext();
 
     const { suggestionsByDay, weekSuggestions, endDate, progressUpdatedAt, nextGame } =
@@ -141,6 +181,7 @@ export function useWeeklyTrainingPlan(user: User): UseWeeklyTrainingPlanResponse
                 endDate,
                 progressUpdatedAt,
                 pinnedTasks: pinnedTasks.map((t) => t.id),
+                archivedTasks: archivedTaskIds,
                 nextGame,
             }) ||
             isEmpty(suggestionsByDay) ||
@@ -159,6 +200,7 @@ export function useWeeklyTrainingPlan(user: User): UseWeeklyTrainingPlanResponse
             ),
             progressUpdatedAt,
             pinnedTasks: pinnedTasks.map((t) => t.id),
+            archivedTasks: archivedTaskIds,
             nextGame,
             skippedTasks:
                 (savedPlan?.endDate ?? '') >= endDate ? savedPlan?.skippedTasks : undefined,
@@ -174,6 +216,7 @@ export function useWeeklyTrainingPlan(user: User): UseWeeklyTrainingPlanResponse
         endDate,
         progressUpdatedAt,
         pinnedTasks,
+        archivedTaskIds,
         nextGame,
         api,
         isLoading,
@@ -214,6 +257,7 @@ function equalPlans(
         endDate: string;
         progressUpdatedAt: string;
         pinnedTasks: string[];
+        archivedTasks: string[];
         nextGame: string;
     },
 ) {
@@ -229,11 +273,33 @@ function equalPlans(
     if (savedPlan.nextGame !== newPlan.nextGame) {
         return false;
     }
-    for (let i = 0; i < newPlan.pinnedTasks.length; i++) {
-        if (savedPlan.pinnedTasks?.[i] !== newPlan.pinnedTasks[i]) {
+
+    // We want savedPlan.pinnedTasks = undefined and newPlan.pinnedTasks = [] to be considered equal
+    // to avoid triggering regenerations on rollout.
+    const savedPinnedTasks = savedPlan.pinnedTasks ?? [];
+    const newPinnedTasks = newPlan.pinnedTasks ?? [];
+    if (savedPinnedTasks.length !== newPinnedTasks.length) {
+        return false;
+    }
+    for (let i = 0; i < newPinnedTasks.length; i++) {
+        if (savedPinnedTasks[i] !== newPinnedTasks[i]) {
             return false;
         }
     }
+
+    // We want savedPlan.archivedTasks = undefined and newPlan.archivedTasks = [] to be considered equal
+    // to avoid triggering regenerations on rollout.
+    const savedArchivedTasks = savedPlan.archivedTasks ?? [];
+    const newArchivedTasks = newPlan.archivedTasks ?? [];
+    if (savedArchivedTasks.length !== newArchivedTasks.length) {
+        return false;
+    }
+    for (let i = 0; i < newArchivedTasks.length; i++) {
+        if (savedArchivedTasks[i] !== newArchivedTasks[i]) {
+            return false;
+        }
+    }
+
     for (let i = 0; i < savedPlan.tasks.length; i++) {
         const savedTasks = savedPlan.tasks[i];
         const newTasks = newPlan.suggestionsByDay[i];

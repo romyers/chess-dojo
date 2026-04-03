@@ -19,6 +19,7 @@ import CohortIcon from '@/scoreboard/CohortIcon';
 import { CategoryColors } from '@/style/ThemeProvider';
 import { getSubscriptionTier } from '@jackstenglein/chess-dojo-common/src/database/user';
 import {
+    Archive,
     CheckBox,
     CheckBoxOutlineBlank,
     KeyboardDoubleArrowDown,
@@ -85,11 +86,13 @@ export function FullTrainingPlan({
         request: requirementRequest,
         allRequirements,
         pinnedTasks,
+        archivedTaskIds,
         togglePin,
         isCurrentUser,
     } = use(TrainingPlanContext);
 
     const [showCompleted, setShowCompleted] = useShowCompleted(isCurrentUser);
+    const [showArchived, setShowArchived] = useShowArchived(isCurrentUser);
     const isSmall = useMediaQuery((theme) => theme.breakpoints.down('md'));
 
     const [expanded, setExpanded] = useState<Partial<Record<RequirementCategory, boolean>>>({
@@ -111,19 +114,25 @@ export function FullTrainingPlan({
         const requirements = allRequirements.filter(
             (r) => r.counts[cohort] && (r.subscriptionTiers?.includes(subscriptionTier) ?? true),
         );
-        const tasks = (requirements as (Requirement | CustomTask)[]).concat(user.customTasks ?? []);
+        const tasks = [...requirements, ...(user.customTasks ?? [])] as (
+            | Requirement
+            | CustomTask
+        )[];
+
+        // When looking at someone else's profile, we don't care if they have archived tasks. We just want to show everything normally.
+        const userScopedArchivedTaskIds = isCurrentUser
+            ? new Set(archivedTaskIds)
+            : new Set<string>();
+
+        // Partition tasks into sections by category
         for (const task of tasks) {
             if (task.counts[cohort] === undefined) {
                 continue;
             }
 
-            const s = sections.find((s) => s.category === task.category);
-            const complete = MINIMUM_TASKS.has(task.id)
-                ? false
-                : task.id !== SCHEDULE_CLASSICAL_GAME_TASK_ID
-                  ? isComplete(cohort, task, user.progress[task.id], timeline, false)
-                  : getUpcomingGameSchedule(user.gameSchedule).length > 0;
+            let s = sections.find((s) => s.category === task.category);
 
+            // Create a new section for this category if one doesn't already exist
             if (s === undefined) {
                 const value = getCategoryScore(user, cohort, task.category, requirements, timeline);
                 const total = getTotalCategoryScore(cohort, task.category, requirements);
@@ -131,15 +140,32 @@ export function FullTrainingPlan({
 
                 sections.push({
                     category: task.category,
-                    uncompletedTasks: complete ? [] : [task],
-                    completedTasks: complete ? [task] : [],
+                    uncompletedTasks: [],
+                    completedTasks: [],
+                    archivedTaskIds: new Set<string>(),
                     progressBar: percent,
                     color: CategoryColors[task.category],
                 });
-            } else if (complete) {
+                s = sections[sections.length - 1];
+            }
+
+            // Check if the task is complete
+            const complete = MINIMUM_TASKS.has(task.id)
+                ? false
+                : task.id !== SCHEDULE_CLASSICAL_GAME_TASK_ID
+                  ? isComplete(cohort, task, user.progress[task.id], timeline, false)
+                  : getUpcomingGameSchedule(user.gameSchedule).length > 0;
+
+            // Partition the task into completed vs uncompleted
+            if (complete) {
                 s.completedTasks.push(task);
             } else {
                 s.uncompletedTasks.push(task);
+            }
+
+            // Mark the task as archived if necessary
+            if (userScopedArchivedTaskIds.has(task.id)) {
+                s.archivedTaskIds.add(task.id);
             }
         }
 
@@ -173,6 +199,7 @@ export function FullTrainingPlan({
                     category: RequirementCategory.Graduation,
                     uncompletedTasks: gradComplete ? [] : [graduationTask],
                     completedTasks: gradComplete ? [graduationTask] : [],
+                    archivedTaskIds: new Set<string>(), // Graduation tasks are never archived
                     progressBar: graduationPercent,
                     color: CategoryColors[RequirementCategory.Graduation],
                 });
@@ -180,7 +207,12 @@ export function FullTrainingPlan({
         }
 
         return sections;
-    }, [allRequirements, user, cohort, timeline]);
+    }, [allRequirements, user, cohort, timeline, archivedTaskIds, isCurrentUser]);
+
+    const hasArchivedTasks = useMemo(
+        () => sections.some((s) => s.archivedTaskIds.size > 0),
+        [sections],
+    );
 
     if (requirementRequest.isLoading() || sections.length === 0) {
         return <LoadingPage />;
@@ -256,6 +288,22 @@ export function FullTrainingPlan({
                     <Stack direction='row' spacing={1} justifyContent='end' alignItems='center'>
                         {isSmall ? (
                             <>
+                                {isCurrentUser && hasArchivedTasks && (
+                                    <Tooltip
+                                        title={
+                                            showArchived
+                                                ? 'Hide Archived Tasks'
+                                                : 'Show Archived Tasks'
+                                        }
+                                    >
+                                        <IconButton
+                                            onClick={() => setShowArchived(!showArchived)}
+                                            color='primary'
+                                        >
+                                            <Archive sx={{ opacity: showArchived ? 1 : 0.5 }} />
+                                        </IconButton>
+                                    </Tooltip>
+                                )}
                                 <Tooltip
                                     title={
                                         showCompleted
@@ -283,6 +331,16 @@ export function FullTrainingPlan({
                             </>
                         ) : (
                             <>
+                                {isCurrentUser && hasArchivedTasks && (
+                                    <Button
+                                        onClick={() => setShowArchived(!showArchived)}
+                                        startIcon={
+                                            showArchived ? <CheckBox /> : <CheckBoxOutlineBlank />
+                                        }
+                                    >
+                                        Show Archived Tasks
+                                    </Button>
+                                )}
                                 <Button
                                     onClick={() => setShowCompleted(!showCompleted)}
                                     startIcon={
@@ -321,6 +379,7 @@ export function FullTrainingPlan({
                         pinnedTasks={pinnedTasks}
                         showCompleted={showCompleted}
                         setShowCompleted={setShowCompleted}
+                        showArchived={showArchived}
                     />
                 ))}
             </Stack>
@@ -330,6 +389,16 @@ export function FullTrainingPlan({
 
 export function useShowCompleted(isCurrentUser: boolean) {
     const myProfile = useLocalStorage('showCompletedTasks', false);
+    const otherProfile = useState(false);
+
+    if (isCurrentUser) {
+        return myProfile;
+    }
+    return otherProfile;
+}
+
+export function useShowArchived(isCurrentUser: boolean) {
+    const myProfile = useLocalStorage('showArchivedTasks', false);
     const otherProfile = useState(false);
 
     if (isCurrentUser) {

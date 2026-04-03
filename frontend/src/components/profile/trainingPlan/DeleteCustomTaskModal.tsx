@@ -64,7 +64,7 @@ const DeleteCustomTaskModal: React.FC<DeleteCustomTaskModalProps> = ({
             <DialogContent>
                 <DialogContentText>
                     This custom task will be removed from your profile, and all time logged will be
-                    lost. This action is irreverisble.
+                    lost. This action is irreversible.
                 </DialogContentText>
             </DialogContent>
             <DialogActions>

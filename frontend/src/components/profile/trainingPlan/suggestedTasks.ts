@@ -129,6 +129,7 @@ enum SuggestedTaskGenerationReason {
     ScheduledGamesUpdateToday,
     ScheduledGamesUpdateFuture,
     SkippedTaskUpdate,
+    ArchivedTaskUpdate,
 }
 
 export class TaskSuggestionAlgorithm {
@@ -137,6 +138,7 @@ export class TaskSuggestionAlgorithm {
     private readonly pinnedTasks: Task[];
     private readonly timeline: TimelineEntry[];
     private readonly skippedTaskIds: string[];
+    private readonly archivedTaskIds: string[];
 
     private user: User;
     private timePerTask: Record<string, number> = {};
@@ -161,6 +163,7 @@ export class TaskSuggestionAlgorithm {
                 )
                 .filter((t) => !!t) ?? [];
         this.skippedTaskIds = this.user.weeklyPlan?.skippedTasks ?? [];
+        this.archivedTaskIds = this.user.archivedTasks ?? [];
     }
 
     /**
@@ -219,6 +222,16 @@ export class TaskSuggestionAlgorithm {
             return SuggestedTaskGenerationReason.PinnedTaskUpdate;
         }
 
+        if (!weeklyPlanMatchesArchivedTasks(existingPlan, this.user.archivedTasks ?? [])) {
+            return SuggestedTaskGenerationReason.ArchivedTaskUpdate;
+        }
+
+        // IMPORTANT: if statements above this comment need to stay above this comment,
+        // and if statements below this comment need to stay below this comment.
+        // Otherwise, e.g. a progressUpdate reason might clobber an archivedTaskUpdate reason,
+        // causing later calls to shouldRegenerateToday() to erroneously ignore
+        // archived task updates
+
         if (existingPlan.progressUpdatedAt !== lastProgressUpdate(this.user)) {
             return SuggestedTaskGenerationReason.ProgressUpdate;
         }
@@ -245,7 +258,8 @@ export class TaskSuggestionAlgorithm {
         return (
             reason === SuggestedTaskGenerationReason.PinnedTaskUpdate ||
             reason === SuggestedTaskGenerationReason.ScheduledGamesUpdateToday ||
-            reason === SuggestedTaskGenerationReason.SkippedTaskUpdate
+            reason === SuggestedTaskGenerationReason.SkippedTaskUpdate ||
+            reason === SuggestedTaskGenerationReason.ArchivedTaskUpdate
         );
     }
 
@@ -476,6 +490,9 @@ export class TaskSuggestionAlgorithm {
      * be suggested unless the user has pinned them. These task IDs are listed in
      * INELIGIBLE_SUGGESTED_TASKS.
      *
+     * NOTE: Tasks in the user's archived tasks list are also ineligible to be suggested,
+     * even if they are pinned.
+     *
      * @param date The date to get suggested tasks for.
      * @returns A list of at most MAX_SUGGESTED_TASKS suggested tasks.
      */
@@ -504,7 +521,9 @@ export class TaskSuggestionAlgorithm {
                     this.user.progress[t.id],
                     this.timeline,
                     true,
-                ) && !this.skippedTaskIds.includes(t.id),
+                ) &&
+                !this.skippedTaskIds.includes(t.id) &&
+                !this.archivedTaskIds.includes(t.id),
         );
         suggestedTasks.push(...pinnedTasks);
 
@@ -518,6 +537,7 @@ export class TaskSuggestionAlgorithm {
             user: this.user,
             timeline: this.timeline,
             skippedTaskIds: this.skippedTaskIds,
+            archivedTaskIds: this.archivedTaskIds,
         });
         if (eligibleRequirements.length === 0) {
             return suggestedTasks;
@@ -615,7 +635,8 @@ export class TaskSuggestionAlgorithm {
             (r) =>
                 r.category === RequirementCategory.Welcome &&
                 !isComplete(this.user.dojoCohort, r, this.user.progress[r.id]) &&
-                !this.skippedTaskIds.includes(r.id),
+                !this.skippedTaskIds.includes(r.id) &&
+                !this.archivedTaskIds.includes(r.id),
         );
         return eligibleRequirements.map((t) => ({ task: t, goalMinutes: 0 }));
     }
@@ -628,6 +649,7 @@ export class TaskSuggestionAlgorithm {
  * @param user The user to suggest tasks for.
  * @param timeline The user's timeline entries.
  * @param skippedTaskIds The ids of tasks the user has skipped.
+ * @param archivedTaskIds The ids of tasks the user has archived.
  * @returns A subset of requirements that are eligible to be suggested to the user.
  */
 function getEligibleTasks({
@@ -636,12 +658,14 @@ function getEligibleTasks({
     user,
     timeline,
     skippedTaskIds,
+    archivedTaskIds,
 }: {
     suggestedTasks: Task[];
     requirements: Requirement[];
     user: User;
     timeline: TimelineEntry[];
     skippedTaskIds: string[];
+    archivedTaskIds: string[];
 }) {
     const isFreeUser = isFree(user);
     let eligibleRequirements = requirements.filter(
@@ -651,7 +675,8 @@ function getEligibleTasks({
             !suggestedTasks.some((t) => r.id === t.id) &&
             SUGGESTED_TASK_CATEGORIES.includes(r.category) &&
             !isComplete(user.dojoCohort, r, user.progress[r.id], timeline, false) &&
-            !skippedTaskIds.includes(r.id),
+            !skippedTaskIds.includes(r.id) &&
+            !archivedTaskIds.includes(r.id),
     );
 
     const classicalGamesTask = requirements.find((r) => r.id === CLASSICAL_GAMES_TASK_ID);
@@ -802,8 +827,32 @@ function weeklyPlanMatchesPinnedTasks(weeklyPlan: WeeklyPlan, pinnedTasks: strin
     if (weeklyPlan.pinnedTasks?.length !== pinnedTasks.length) {
         return false;
     }
+    // For pinned tasks, order matters
     for (let i = 0; i < weeklyPlan.pinnedTasks.length; i++) {
         if (weeklyPlan.pinnedTasks[i] !== pinnedTasks[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Returns a boolean indicating whether the given weekly plan matches the given archived tasks.
+ * A weekly plan matches archived tasks if the plan has the same task ids (in any order) as
+ * the given archived tasks.
+ * @param weeklyPlan The weekly plan to check.
+ * @param archivedTasks The archived tasks to check.
+ * @returns True if the weekly plan matches the archived tasks.
+ */
+function weeklyPlanMatchesArchivedTasks(weeklyPlan: WeeklyPlan, archivedTasks: string[]): boolean {
+    // For archived tasks, order doesn't matter and we don't care about duplicates
+    const oldArchivedTasksSet = new Set(weeklyPlan?.archivedTasks);
+    const newArchivedTasksSet = new Set(archivedTasks);
+    if (oldArchivedTasksSet.size !== newArchivedTasksSet.size) {
+        return false;
+    }
+    for (const newTaskId of newArchivedTasksSet) {
+        if (!oldArchivedTasksSet.has(newTaskId)) {
             return false;
         }
     }

@@ -40,6 +40,7 @@ interface FullTrainingPlanItemProps {
     isCurrentUser: boolean;
     togglePin: (req: Requirement | CustomTask) => void;
     isPinned: boolean;
+    isArchived: boolean;
 }
 
 export const FullTrainingPlanItem = ({
@@ -50,6 +51,7 @@ export const FullTrainingPlanItem = ({
     isCurrentUser,
     togglePin,
     isPinned,
+    isArchived,
 }: FullTrainingPlanItemProps) => {
     const [taskDialogView, setTaskDialogView] = useState<TaskDialogView>();
     const { requirements } = useRequirements(ALL_COHORTS, false);
@@ -135,6 +137,7 @@ export const FullTrainingPlanItem = ({
     return (
         <Tooltip title={blocker.reason} followCursor>
             <Stack
+                sx={{ opacity: isArchived ? 0.5 : 1 }}
                 spacing={2}
                 mt={2}
                 data-testid={`${requirement.name.replaceAll(' ', '-')}-training-plan-entry`}
@@ -223,6 +226,7 @@ export const FullTrainingPlanItem = ({
                             />
                         )}
                     </Grid>
+                    {isArchived && <Chip label='Archived' size='small' color='default' />}
                     <Grid size='auto' id='task-status'>
                         <Stack direction='row' alignItems='center' justifyContent='end'>
                             {!blocker.isBlocked && (
